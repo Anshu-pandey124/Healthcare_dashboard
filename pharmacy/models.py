@@ -1,6 +1,8 @@
 # from django.db import models
 
 # Create your models here.
+from datetime import date
+
 from django.db import models
 
 class MedicineCategory(models.Model):
@@ -38,12 +40,9 @@ class Medicine(models.Model):
     def is_low_stock(self):
         return self.stock_quantity <= self.reorder_level
 
-    # @property
-    # def is_expired(self):
-    #     if self.expiry_date:
-    #         from datetime import date
-    #         return self.expiry_date < date.today()
-    #     return False
+    @property
+    def is_expired(self):
+        return self.expiry_date is not None and self.expiry_date < date.today()
 
 
 class Dispensing(models.Model):
@@ -61,12 +60,13 @@ class Dispensing(models.Model):
         return f"{self.medicine.name} to {self.patient_name} ({self.dispensed_at.date()})"
 
     def save(self, *args, **kwargs):
-        self.total_price = self.quantity * self.unit_price
         self.unit_price = self.medicine.unit_price
+        self.total_price = self.quantity * self.unit_price
+        is_new = self._state.adding
         super().save(*args, **kwargs)
-        # Reduce stock
-        self.medicine.stock_quantity -= self.quantity
-        self.medicine.save()
+        if is_new:
+            self.medicine.stock_quantity -= self.quantity
+            self.medicine.save(update_fields=['stock_quantity', 'updated_at'])
 
     class Meta:
         ordering = ['-dispensed_at']
